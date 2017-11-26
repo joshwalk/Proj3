@@ -51,18 +51,41 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 
 
 # Put the rest of your caching setup here:
-
+try:
+	cache_file = open(CACHE_FNAME,'r')
+	cache_contents = cache_file.read()
+	cache_file.close()
+	CACHE_DICTION = json.loads(cache_contents)
+except:
+	CACHE_DICTION = {}
 
 
 # Define your function get_user_tweets here:
 
-
+def get_user_tweets(user):
+	if user in CACHE_DICTION:
+		print("using cache")
+		return CACHE_DICTION[user]
+	else:
+		print("fetching")
+		results = api.user_timeline(user)
+		try:
+			CACHE_DICTION[user] = results
+			dumped_json_cache = json.dumps(CACHE_DICTION)
+			fw = open(CACHE_FNAME, "w")
+			fw.write(dumped_json_cache)
+			fw.close()
+			return CACHE_DICTION[user]
+		except:
+			print("not in cache and invalid username")
+			return None
 
 
 
 # Write an invocation to the function for the "umich" user timeline and
 # save the result in a variable called umich_tweets:
 
+umich_tweets = get_user_tweets("umich")
 
 
 
@@ -73,7 +96,8 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # NOTE: For example, if the user with the "TedXUM" screen name is
 # mentioned in the umich timeline, that Twitter user's info should be
 # in the Users table, etc.
-
+conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+cur = conn.cursor()
 
 
 ## You should load into the Tweets table:
@@ -81,6 +105,24 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # umich timeline.
 # NOTE: Be careful that you have the correct user ID reference in
 # the user_id column! See below hints.
+cur.execute('DROP TABLE IF EXISTS Users')
+cur.execute('CREATE TABLE Users (user_id TEXT PRIMARY KEY, screen_name TEXT, num_favs NUMBER, description TEXT)')
+
+cur.execute('DROP TABLE IF EXISTS Tweets')
+cur.execute('CREATE TABLE Tweets (tweet_id TEXT PRIMARY KEY, text TEXT, user_posted TEXT REFERENCES Users(user_id), time_posted DATETIME, retweets NUMBER)')
+
+for tw in umich_tweets:
+	get_user = api.get_user(tw["user"]["id"])
+	user_tup = get_user["id"], get_user["screen_name"], get_user["favourites_count"], get_user["description"]
+	cur.execute('INSERT OR IGNORE INTO Users (user_id, screen_name, num_favs, description) VALUES (?, ?, ?, ?)', user_tup)
+	for mentioned_users in tw["entities"]["user_mentions"]:
+		get_mentioned_user = api.get_user(mentioned_users["id"])
+		mentioned_user_tup = get_mentioned_user["id"], get_mentioned_user["screen_name"], get_mentioned_user["favourites_count"], get_mentioned_user["description"]
+		cur.execute('INSERT OR IGNORE INTO Users (user_id, screen_name, num_favs, description) VALUES (?, ?, ?, ?)', mentioned_user_tup)
+
+	tweet_tup = tw["id"], tw["text"], tw["user"]["id"], tw["created_at"], tw["retweet_count"]
+	cur.execute('INSERT INTO Tweets (tweet_id, text, user_posted, time_posted, retweets) VALUES (?, ?, ?, ?, ?)', tweet_tup)
+conn.commit()
 
 
 ## HINT: There's a Tweepy method to get user info, so when you have a
@@ -100,27 +142,29 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 
 # Make a query to select all of the records in the Users database.
 # Save the list of tuples in a variable called users_info.
-
-users_info = True
+cur.execute('SELECT * FROM Users')
+users_info = cur.fetchall()
+print(users_info)
 
 # Make a query to select all of the user screen names from the database.
 # Save a resulting list of strings (NOT tuples, the strings inside them!)
 # in the variable screen_names. HINT: a list comprehension will make
 # this easier to complete!
-screen_names = True
-
+cur.execute('SELECT screen_name FROM Users')
+screen_names = [x[0] for x in cur.fetchall()]
 
 # Make a query to select all of the tweets (full rows of tweet information)
 # that have been retweeted more than 10 times. Save the result
-# (a list of tuples, or an empty list) in a variable called retweets.
-retweets = True
-
+# (a list of tuples, or an empty list) in a variable called retweets.retweets = cur.fetchall()
+cur.execute('SELECT * FROM Tweets WHERE retweets > 10')
+retweets = cur.fetchall()
 
 # Make a query to select all the descriptions (descriptions only) of
 # the users who have favorited more than 500 tweets. Access all those
 # strings, and save them in a variable called favorites,
 # which should ultimately be a list of strings.
-favorites = True
+cur.execute('SELECT description FROM Users WHERE num_favs > 500')
+favorites = cur.fetchall()
 
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
@@ -140,10 +184,12 @@ joined_data2 = True
 ### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable,
 ### but it's a pain). ###
 
-###### TESTS APPEAR BELOW THIS LINE ######
-###### Note that the tests are necessary to pass, but not sufficient --
-###### must make sure you've followed the instructions accurately!
-######
+cur.close()
+
+##### TESTS APPEAR BELOW THIS LINE ######
+##### Note that the tests are necessary to pass, but not sufficient --
+##### must make sure you've followed the instructions accurately!
+#####
 print("\n\nBELOW THIS LINE IS OUTPUT FROM TESTS:\n")
 
 
