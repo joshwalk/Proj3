@@ -140,6 +140,7 @@ conn.commit()
 # All of the following sub-tasks require writing SQL statements
 # and executing them using Python.
 
+
 # Make a query to select all of the records in the Users database.
 # Save the list of tuples in a variable called users_info.
 cur.execute('SELECT * FROM Users')
